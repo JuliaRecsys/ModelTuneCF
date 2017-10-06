@@ -162,15 +162,14 @@ end
 
 function run(dataset::Persa.CFDatasetAbstract,
                 createmodel::Function,
-                params::Tuple{AbstractString, Any}...;
-                generations::Int = 10,
-                population::Int = 3,
-                mutation_ratio::Float64 = 0.2,
-                elite::Int = 2,
-                k::Float64 = 0.9,
-                verbose::Bool = true,
-                patience::Int = 3
-                )
+                generations::Int,
+                population::Int,
+                mutation_ratio::Float64,
+                elite::Int,
+                k::Float64,
+                verbose::Bool,
+                patience::Int,
+                params::Tuple{AbstractString, Any}...)
 
     if verbose
         global logger = Memento.config("debug"; fmt="[{date} | {level}]: {msg}")
@@ -219,4 +218,20 @@ function run(dataset::Persa.CFDatasetAbstract,
 
     return (createmodel(dataset, values...), values, best_genes[1].fitness)
 end
+end
+
+function modeltunega(dataset::Persa.CFDatasetAbstract,
+                createmodel::Function,
+                params::Tuple{AbstractString, Any}...;
+                generations::Int = 10,
+                population::Int = 3,
+                mutation_ratio::Float64 = 0.2,
+                elite::Int = 2,
+                k::Float64 = 0.9,
+                verbose::Bool = true,
+                patience::Int = 3
+                )
+    GA.run(dataset, createmodel,
+            generations, population, mutation_ratio,
+            elite, k, verbose, patience, params...)
 end
