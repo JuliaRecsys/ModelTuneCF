@@ -163,7 +163,7 @@ end
 function run(dataset::Persa.CFDatasetAbstract,
                 createmodel::Function,
                 params::Tuple{AbstractString, Any}...;
-                generations::Int = 20,
+                generations::Int = 10,
                 population::Int = 3,
                 mutation_ratio::Float64 = 0.2,
                 elite::Int = 2,
@@ -209,6 +209,14 @@ function run(dataset::Persa.CFDatasetAbstract,
     global estfun(args...) = createmodel(ds_train, args...)
     global evalfun(model) = Persa.aval(model, ds_val).mae
 
-    runga(GA; initial_pop_size = population)
+    gamodel = runga(GA; initial_pop_size = population)
+
+    values = Array{Any}(length(best_genes[1].params))
+
+    for i=1:length(values)
+        values[i] = best_genes[1].params[i].values[best_genes[1].values[i]]
+    end
+
+    return (createmodel(dataset, values...), values, best_genes[1].fitness)
 end
 end
