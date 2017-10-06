@@ -145,13 +145,19 @@ end
 function fitness(ent)
     debug(logger, "Training a model")
 
-    values = Array{Any}(length(ent.params))
-
-    for i=1:length(values)
-        values[i] = ent.params[i].values[ent.values[i]]
-    end
+    values = params(ent)
 
     ent.fitness = evalfun(estfun(values...))
+end
+
+function params(gene::Gene)
+    values = Array{Any}(length(gene.params))
+
+    for i=1:length(values)
+        values[i] = gene.params[i].values[gene.values[i]]
+    end
+
+    return values
 end
 
 function run(dataset::Persa.CFDatasetAbstract,
