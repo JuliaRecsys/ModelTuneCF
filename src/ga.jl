@@ -1,8 +1,10 @@
-module GeneticAlgorithms2
+module GA
 import Base.isless
 
 using GeneticAlgorithms
 using Persa
+
+using Memento
 
 mutable struct Param{T}
     name::AbstractString
@@ -24,7 +26,7 @@ function Gene(params::Array{Param})
 
     gene = Gene(values, params, +Inf)
 
-    println("-- Creating $gene")
+    debug(logger, "Creating $gene")
 
     return gene
 end
@@ -35,7 +37,7 @@ function Gene(parents::Array{Gene})
     num_parents = length(parents)
 
     for i=1:num_parents
-        println("-- Parent $i: $(parents[i])")
+        debug(logger, "Parent $i: $(parents[i])")
     end
 
     for i=1:length(child.values)
@@ -43,7 +45,7 @@ function Gene(parents::Array{Gene})
         child.values[i] = parents[parent].values[i]
     end
 
-    println("Child: $child")
+    debug(logger, "Child: $child")
 
     return child
 end
@@ -57,12 +59,12 @@ function Base.show(io::IO, gene::Gene)
 
     text = string(text, ")")
 
-    print(io, text)
+    show(io, text)
 end
 
 function mutate(gene::Gene)
-    # let's go crazy and mutate 20% of the time
-    rand(Float64) < 0.8 && return
+    # let's go crazy and mutate mutation_rate% of the time
+    rand(Float64) < (1 - g_mutation_ratio) && return
 
     i = rand(UInt) % length(gene.values) + 1
     gene.values[i] = rand([1:length(gene.params[i].values)...])
@@ -75,53 +77,45 @@ function create_entity(num)
 end
 
 function group_entities(pop)
-    global generation
-    global maxgen
-    global best_fitness
-    global dontchange_fitness
-    global max_dontchange_fitness
-    global best_values
-
-    generation += 1
-
-    if true
-        println(best_gene)
-        return
-    end
+    global generation += 1
+    global best_genes
+    global dontchange
+    global g_population
 
     if pop[1].fitness == 0
         return
     end
 
-    if pop[1].fitness < best_fitness
-        best_fitness = pop[1].fitness
-        dontchange_fitness = 0
-        best_values = pop[1].values
+    if pop[1].fitness < best_genes[1].fitness
+        dontchange = 0
     else
-        dontchange_fitness += 1
-        pop[1].values = best_values
-        pop[1].fitness = best_fitness
+        dontchange += 1
     end
 
-    print("BEST $generation/$maxgen: ", pop[1])
+    push!(pop, best_genes...)
 
-    if generation >= maxgen
+    sort!(pop; lt = (x, y) -> x.fitness < y.fitness)
+
+    best_genes = pop[1:g_elite]
+
+    info(logger, "BEST $generation/$g_generations: $(pop[1])")
+
+    if generation >= g_generations
         return
     end
 
-    if dontchange_fitness > max_dontchange_fitness
+    if dontchange > g_patience
         return
     end
-
-    produce([1])
 
     # simple naive groupings that pair the best entitiy with every other
-    for i in 1:(length(pop) - 1)
+    for i in 1:g_population
         ranks = rankroulette(length(pop))
         parent1 = rand(ranks)
         deleteat!(ranks, findin(ranks, [parent1]))
         parent2 = rand(ranks)
-        println("-- Crossover: $parent1, $parent2")
+
+        debug(logger, "Crossover: $parent1, $parent2")
         produce([parent1, parent2])
     end
 end
@@ -149,48 +143,66 @@ function crossover(group)
 end
 
 function fitness(ent)
-    global estfun2
-    global evalfun2
-    println("-- Fitness")
+    debug(logger, "Training a model")
+
     values = Array{Any}(length(ent.params))
+
     for i=1:length(values)
         values[i] = ent.params[i].values[ent.values[i]]
     end
 
-    ent.fitness = evalfun2(estfun2(values...))
+    ent.fitness = evalfun(estfun(values...))
 end
 
-parameters = Array{Param}(0)
-estfun2 = Array{Param}(0)
-evalfun2 = Array{Param}(0)
-best_values = Array{Int}(0)
-generation = 0
-maxgen = 2
-best_fitness = Inf
-dontchange_fitness = 0
-max_dontchange_fitness = 3
+function run(dataset::Persa.CFDatasetAbstract,
+                createmodel::Function,
+                params::Tuple{AbstractString, Any}...;
+                generations::Int = 20,
+                population::Int = 3,
+                mutation_ratio::Float64 = 0.2,
+                elite::Int = 2,
+                k::Float64 = 0.9,
+                verbose::Bool = true,
+                patience::Int = 3
+                )
 
-function run(dataset::Persa.CFDatasetAbstract, estfun::Function, params::Tuple{AbstractString, Any}...; maxgenerations::Int = 2)
-    global parameters = Array{Param}(length(params))
+    if verbose
+        global logger = Memento.config("debug"; fmt="[{date} | {level}]: {msg}")
+    else
+        global logger = Memento.config("info"; fmt="[{date} | {level}]: {msg}")
+    end
+
+    info(logger, "Starting Genetic Algorithm")
+
+    # Global Parameters
+    global g_generations = generations
+    global g_mutation_ratio = mutation_ratio
+    global g_elite = elite
+    global g_population = population
+
+    # Global Variables
     global generation = 0
-    global maxgen = maxgenerations
-    global bestgen = Array{Gene}(maxgen)
-    global best_fitness = Inf
-    global dontchange_fitness = 0
-    global max_dontchange_fitness = 3
-    global best_values = Array{Int}(length(params))
+
+    global g_patience = patience
+    global dontchange = 0
+
+    global parameters = Array{Param}(length(params))
 
     for i=1:length(params)
         parameters[i] = Param(params[i][1], params[i][2])
     end
 
-    global best_gene = Gene(parameters)
+    global best_genes = Array{Gene}(elite)
 
-    ds_train, ds_test = Persa.get(Persa.HoldOut(dataset, 0.9))
+    for i=1:elite
+        best_genes[i] = Gene(parameters)
+    end
 
-    GeneticAlgorithms2.estfun2(args...) = estfun(ds_train, args...)
-    GeneticAlgorithms2.evalfun2(model) = Persa.aval(model, ds_test).mae
+    ds_train, ds_val = Persa.get(Persa.HoldOut(dataset, k))
 
-    runga(GeneticAlgorithms2; initial_pop_size = 3)
+    global estfun(args...) = createmodel(ds_train, args...)
+    global evalfun(model) = Persa.aval(model, ds_val).mae
+
+    runga(GA; initial_pop_size = population)
 end
 end
