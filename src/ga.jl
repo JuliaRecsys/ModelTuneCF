@@ -108,6 +108,11 @@ function group_entities(pop)
         return
     end
 
+    if (time() - initialtime) > g_timelimit
+        info(logger, "Time Limit")
+        return
+    end
+
     # simple naive groupings that pair the best entitiy with every other
     for i in 1:g_population
         ranks = rankroulette(length(pop))
@@ -169,6 +174,7 @@ function run(dataset::Persa.CFDatasetAbstract,
                 k::Float64,
                 verbose::Bool,
                 patience::Int,
+                timelimit::Real,
                 params::Tuple{AbstractString, Any}...)
 
     if verbose
@@ -184,6 +190,8 @@ function run(dataset::Persa.CFDatasetAbstract,
     global g_mutation_ratio = mutation_ratio
     global g_elite = elite
     global g_population = population
+    global g_timelimit = timelimit
+    global initialtime = time()
 
     # Global Variables
     global generation = 0
@@ -229,9 +237,10 @@ function modeltunega(dataset::Persa.CFDatasetAbstract,
                 elite::Int = 2,
                 k::Float64 = 0.9,
                 verbose::Bool = true,
-                patience::Int = 3
+                patience::Int = 3,
+                timelimit::Real = Inf
                 )
     GA.run(dataset, createmodel,
             generations, population, mutation_ratio,
-            elite, k, verbose, patience, params...)
+            elite, k, verbose, patience, timelimit, params...)
 end
